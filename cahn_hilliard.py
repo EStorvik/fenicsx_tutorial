@@ -34,7 +34,7 @@ msh = mesh.create_rectangle(
     cell_type=mesh.CellType.triangle,
 )
 
-dt = 0.0001
+dt = 0.001
 num_time_steps = 100
 t = 0
 eps = 0.01
@@ -59,8 +59,8 @@ def doublewell_prime(p):
     return -(1-p**2)*p
 
 rng = np.random.default_rng(42)
-u_old.sub(0).interpolate(lambda x: rng.random(x.shape[1]))
-u_old.x.scatter_forward()
+u.sub(0).interpolate(lambda x: rng.random(x.shape[1]).clip(-0.5,0.5))
+u.x.scatter_forward()
 
 # Variational form
 F_phi = (ufl.inner(phi, v)  + eps*m*dt * ufl.inner(ufl.grad(mu), ufl.grad(v)) - ufl.inner(phi_old, v))*ufl.dx
@@ -79,6 +79,7 @@ problem = NonlinearProblem(
         "snes_stol": 1e-3,
         "snes_atol": 0,
         "snes_rtol": 0,
+        "snes_max_it": 100,
         "snes_monitor": None,
         "ksp_type": "preonly",
         "pc_type": "lu",
@@ -95,29 +96,29 @@ V_phi, dofs = V.sub(0).collapse()
 
 cells, types, x = plot.vtk_mesh(V_phi)
 grid = pyvista.UnstructuredGrid(cells, types, x)
-grid.point_data["phi"] = u_old.x.array[dofs].real
+grid.point_data["phi"] = u.x.array[dofs].real
 grid.set_active_scalars("phi")
 
 p = pyvistaqt.BackgroundPlotter(title="phi", auto_update=True)
 p.add_mesh(grid, clim =[0, 1])
-p.view_xy(True)
+p.view_xy(negative = True)
 p.add_text(f"time: {t}", font_size=12, name="timelabel")
-
 
 
 for i in range(num_time_steps):
     
     t += dt  # Update the time constant
-    
+    u_old.x.array[:] = u.x.array
+    u_old.x.scatter_forward()
     u = problem.solve()
-    u_old.x.array[:] = u.x.array[:]
+    u.x.scatter_forward()
     # l2_error = np.sqrt(
     # fem.assemble_scalar(fem.form(ufl.inner(uh - u_exact, uh - u_exact) * ufl.dx))
     # )
     # print(l2_error)
     # Add scalar data to grid
     p.add_text(f"time: {t:.2e}", font_size=12, name="timelabel")
-    grid.point_data["uh"] = u.x.array[dofs].real
+    grid.point_data["phi"] = u.x.array[dofs].real
     p.app.processEvents()
     # time.sleep(0.1)
 
