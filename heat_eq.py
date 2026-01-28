@@ -71,7 +71,7 @@ a = ufl.inner(u, v) * ufl.dx + dt * ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx
 L = dt * ufl.inner(f, v) * ufl.dx + ufl.inner(u_old, v) * ufl.dx
 
 # Problem
-problem = LinearProblem(
+problem = NonlinearProblem(
     a,
     L,
     bcs=[bc],
