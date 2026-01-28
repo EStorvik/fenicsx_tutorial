@@ -43,7 +43,7 @@ m = 1
 # Function space
 P1 = element("Lagrange", msh.basix_cell(), 1)
 
-V = fem.functionspace(msh, mixed_element([P1,P1]))
+V = fem.functionspace(msh, mixed_element([P1, P1]))
 
 v, w = ufl.TestFunction(V)
 
@@ -52,21 +52,38 @@ u_old = fem.Function(V)
 phi, mu = ufl.split(u)
 phi_old, mu_old = ufl.split(u_old)
 
+
 def doublewell(p):
-    return 1/4*(1-p**2)**2
+    return 1 / 4 * (1 - p**2) ** 2
+
 
 def doublewell_prime(p):
-    return -(1-p**2)*p
+    return -(1 - p**2) * p
+
+
+def energy(p):
+    return fem.assemble_scalar(
+        fem.form((eps * inner(grad(p), grad(p)) + 1 / eps * doublewell(p)) * dx)
+    )
+
 
 rng = np.random.default_rng(42)
-u.sub(0).interpolate(lambda x: rng.random(x.shape[1]).clip(-0.5,0.5))
+u.sub(0).interpolate(lambda x: rng.random(x.shape[1]).clip(-0.5, 0.5))
 u.x.scatter_forward()
 
 # Variational form
-F_phi = (ufl.inner(phi, v)  + eps*m*dt * ufl.inner(ufl.grad(mu), ufl.grad(v)) - ufl.inner(phi_old, v))*ufl.dx
-F_mu = (ufl.inner(mu, w) - ufl.inner(doublewell_prime(phi), w)/eps - ufl.inner(ufl.grad(phi), grad(w))*eps)*dx
+F_phi = (
+    ufl.inner(phi, v)
+    + eps * m * dt * ufl.inner(ufl.grad(mu), ufl.grad(v))
+    - ufl.inner(phi_old, v)
+) * ufl.dx
+F_mu = (
+    ufl.inner(mu, w)
+    - ufl.inner(doublewell_prime(phi), w) / eps
+    - ufl.inner(ufl.grad(phi), grad(w)) * eps
+) * dx
 
-F = F_phi +F_mu
+F = F_phi + F_mu
 
 # Problem
 problem = NonlinearProblem(
@@ -100,18 +117,20 @@ grid.point_data["phi"] = u.x.array[dofs].real
 grid.set_active_scalars("phi")
 
 p = pyvistaqt.BackgroundPlotter(title="phi", auto_update=True)
-p.add_mesh(grid, clim =[0, 1])
-p.view_xy(negative = True)
+p.add_mesh(grid, clim=[0, 1])
+p.view_xy(negative=True)
 p.add_text(f"time: {t}", font_size=12, name="timelabel")
-
-
+energy_vec = []
+time_vec = []
 for i in range(num_time_steps):
-    
+
     t += dt  # Update the time constant
+    time_vec.append(t)
     u_old.x.array[:] = u.x.array
     u_old.x.scatter_forward()
     u = problem.solve()
     u.x.scatter_forward()
+    energy_vec.append(energy(phi))
     # l2_error = np.sqrt(
     # fem.assemble_scalar(fem.form(ufl.inner(uh - u_exact, uh - u_exact) * ufl.dx))
     # )
@@ -123,6 +142,6 @@ for i in range(num_time_steps):
     # time.sleep(0.1)
 
 
-
-
-
+plt.figure("Energy plot")
+plt.plot(time_vec[3:], energy_vec[3:])
+plt.show()
