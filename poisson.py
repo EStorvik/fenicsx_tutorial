@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from petsc4py.PETSc import ScalarType
-from dolfinx import mesh, fem, plot, io
+from dolfinx import mesh, fem, plot, io, la
 
 from dolfinx.fem.petsc import LinearProblem
 
@@ -27,7 +27,7 @@ msh = mesh.create_rectangle(
 )
 
 # Function space
-V = fem.functionspace(msh, ("Lagrange", 1))
+V = fem.functionspace(msh, ("CG", 1))
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
 
@@ -50,6 +50,8 @@ bc = fem.dirichletbc(value=ScalarType(0), dofs=dofs, V=V)
 x = ufl.SpatialCoordinate(msh)
 f = -2.0 * (x[0] * (1.0 - x[0]) + x[1] * (1.0 - x[1]))
 
+u_exact = x[0] * x[1] * (1.0 - x[0]) * (1.0 - x[1])
+
 # Variational form
 a = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx
 L = ufl.inner(f, v) * ufl.dx
@@ -69,14 +71,21 @@ problem = LinearProblem(
 
 uh = problem.solve()
 
+
+l2_error = np.sqrt(
+    fem.assemble_scalar(fem.form(ufl.inner(uh - u_exact, uh - u_exact) * ufl.dx))
+)
+
+
+print(f"Manual norm: {l2_error}")
+
+
 ###############################
 # Plotting with matplotlib
 ###############################
 coords = msh.geometry.x[:, :2]  # Get x, y coordinates
 u_array = uh.x.array.real
-triangles = msh.topology.connectivity(2, 0).array.reshape(
-    -1, 3
-) 
+triangles = msh.topology.connectivity(2, 0).array.reshape(-1, 3)
 
 fig, ax = plt.subplots()
 # Use tricontourf for filled contours
@@ -106,6 +115,6 @@ plotter.add_mesh(warped)
 plotter.show()
 
 
-with io.XDMFFile(msh.comm,  "output/poisson.xdmf", "w") as file:
+with io.XDMFFile(msh.comm, "output/poisson.xdmf", "w") as file:
     file.write_mesh(msh)
     file.write_function(uh)
